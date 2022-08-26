@@ -18,7 +18,6 @@ from pathlib import Path
 import numpy as np
 import PIL.Image
 import matplotlib.pylab as pl
-from google.colab import files
 
 from lucid.misc.gl.glcontext import create_opengl_context
 import OpenGL.GL as gl
@@ -39,21 +38,9 @@ from IPython.display import clear_output, display, Image, HTML
 
 
 def print_hi(name):
-
-    print(tf.__version__)
-    create_opengl_context()
-    print(gl.glGetString(gl.GL_VERSION))
-    model = vision_models.InceptionV1()
-    model.load_graphdef()
-    mesh = meshutil.load_obj('article_models/bunny.obj')
-    mesh = meshutil.normalize_mesh(mesh)
-
-    TEXTURE_SIZE = 1024
-    original_texture = prepare_image('article_models/bunny.png', (TEXTURE_SIZE, TEXTURE_SIZE))
-
-    style_url = 'https://64.media.tumblr.com/6cbcd2721b19d6b51a86966117147ec1/tumblr_n2mjv9eA701qzfmh5o1_r1_1280.jpg'
-    style = prepare_image(style_url)
-    show.image(style, 'jpeg')
+    model = create_model()
+    mesh, original_texture, style, TEXTURE_SIZE = create_mesh('article_models/bunny.obj', 'article_models/bunny.png',
+                                                       'https://64.media.tumblr.com/6cbcd2721b19d6b51a86966117147ec1/tumblr_n2mjv9eA701qzfmh5o1_r1_1280.jpg')
 
     renderer = glrenderer.MeshRenderer((512, 512))
 
@@ -131,10 +118,10 @@ def print_hi(name):
                 face=mesh['face'])
             _, loss = sess.run([train_op, [content_loss, sl.style_loss]], {t_fragments: fragments})
             loss_log.append(loss)
-            if i == 0 or (i + 1) % 50 == 0:
-                clear_output()
-                last_frame, last_content = sess.run([t_frame_current, t_frame_content], {t_fragments: fragments})
-                show.images([last_frame, last_content], ['current frame', 'content'])
+            #if i == 0 or (i + 1) % 50 == 0:
+                #clear_output()
+                #last_frame, last_content = sess.run([t_frame_current, t_frame_content], {t_fragments: fragments})
+                #show.images([last_frame, last_content], ['current frame', 'content'])
             if i == 0 or (i + 1) % 10 == 0:
                 print(len(loss_log), loss)
 
@@ -142,9 +129,13 @@ def print_hi(name):
 
     run(mesh)
 
-    pl.plot(loss_log)
-    pl.legend(['Content Loss', 'Style Loss'])
-    pl.show()
+    #pl.plot(loss_log)
+    #pl.legend(['Content Loss', 'Style Loss'])
+    #pl.show()
+
+    texture = t_texture.eval()
+    show.textured_mesh(mesh, texture)
+
 
 def prepare_image(fn, size=None):
     data = lucid_io.reading.read(fn)
@@ -154,6 +145,20 @@ def prepare_image(fn, size=None):
     return np.float32(im)/255.0
 
 
+def create_mesh(object_path, texture_path, style_path, texture_size=1024):
+    mesh = meshutil.load_obj(object_path)
+    mesh = meshutil.normalize_mesh(mesh)
+    TEXTURE_SIZE = 1024
+    original_texture = prepare_image(texture_path, (TEXTURE_SIZE, TEXTURE_SIZE))
+    style = prepare_image(style_path)
+    return mesh, original_texture, style, texture_size
+
+
+def create_model():
+    create_opengl_context()
+    model = vision_models.InceptionV1()
+    model.load_graphdef()
+    return model
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':

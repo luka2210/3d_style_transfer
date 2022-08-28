@@ -19,7 +19,6 @@ import OpenGL.GL as gl
 
 from lucid.misc.gl import meshutil
 from lucid.misc.gl import glrenderer
-import lucid.misc.io.showing as show
 import lucid.misc.io as lucid_io
 from lucid.misc.tfutil import create_session
 
@@ -29,23 +28,26 @@ from lucid.optvis import param
 from lucid.optvis.style import StyleLoss, mean_l1_loss
 from lucid.optvis.param.spatial import sample_bilinear
 
+from display_results import show_textured_mesh
+
 
 def main():
     model = create_model()
     create_opengl_context()
-    mesh, original_texture, style, texture_size = create_mesh('article_models/bunny.obj', 'article_models/bunny.png',
-                                                       'https://64.media.tumblr.com/6cbcd2721b19d6b51a86966117147ec1/tumblr_n2mjv9eA701qzfmh5o1_r1_1280.jpg')
+    mesh, original_texture, style, texture_size = load_data('article_models/skull.obj', 'article_models/skull.jpg',
+                                                       'styles/yellow_newspapper.jpg', 2048)
 
     neural_net = NeuralNet(model, mesh, original_texture, style, texture_size)
 
-    t_texture, loss_log = neural_net.run()
+    t_texture, loss_log = neural_net.run(600)
 
     pl.plot(loss_log)
     pl.legend(['Content Loss', 'Style Loss'])
     pl.show()
 
     texture = t_texture.eval()
-    show.textured_mesh(mesh, texture)
+    show_textured_mesh("optimized.html", mesh, texture)
+    show_textured_mesh("original.html", mesh, original_texture)
 
 
 def prepare_image(fn, size=None):
@@ -56,7 +58,7 @@ def prepare_image(fn, size=None):
     return np.float32(im)/255.0
 
 
-def create_mesh(object_path, texture_path, style_path, texture_size=1024):
+def load_data(object_path, texture_path, style_path, texture_size=1024):
     mesh = meshutil.load_obj(object_path)
     mesh = meshutil.normalize_mesh(mesh)
     original_texture = prepare_image(texture_path, (texture_size, texture_size))
@@ -80,7 +82,7 @@ class NeuralNet:
 
     def run(self, step_n=400):
         # create renderer
-        renderer = glrenderer.MeshRenderer((512, 512))
+        renderer = glrenderer.MeshRenderer((1024, 1024))
 
         # neural net parameters
         googlenet_style_layers = [
@@ -106,7 +108,6 @@ class NeuralNet:
         # style loss
         style_layers = [sess.graph.get_tensor_by_name('import/%s:0' % s)[0] for s in googlenet_style_layers]
         sl = StyleLoss(style_layers, style_decay, loss_func=mean_l1_loss)
-        sl.set_style({t_input: self.style[None, ...]})
 
         # content loss
         content_layer = sess.graph.get_tensor_by_name('import/%s:0' % googlenet_content_layer)
@@ -121,6 +122,8 @@ class NeuralNet:
         init_op = tf.global_variables_initializer()
         init_op.run()
 
+        content_var.load(self.original_texture)
+        sl.set_style({t_input: self.style[None, ...]})
         loss_log = []
 
         for i in range(step_n):
@@ -141,7 +144,6 @@ class NeuralNet:
 
         # original texture - processed
         content_var = tf.Variable(tf.zeros([self.texture_size, self.texture_size, 3]), trainable=False)
-        content_var.load(self.original_texture)
 
         # t_fragments [U, V, _, Alpha]
         # t_uv - coordinates
